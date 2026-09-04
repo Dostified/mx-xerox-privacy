@@ -120,25 +120,12 @@
 
         .badge-success { background: var(--success-color); color: #000; }
         .badge-danger { background: var(--error-color); color: #fff; }
-        .warning-box {
-            background-color: #7c2d12;
-            color: #ffedd5;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            font-size: 0.85rem;
-            display: none;
-        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>Epson Connect Print Manager</h2>
-
-    <div id="file-protocol-warning" class="warning-box">
-        ⚠️ <b>Warning:</b> Aap file ko directly <code>file:///</code> protocol se khol rahe hain. OAuth Login fail ho sakta hai. Isko <code>http://localhost</code> ya kisi web server se kholein.
-    </div>
 
     <!-- Step 1: OAuth Authentication -->
     <div class="section">
@@ -176,15 +163,11 @@
 </div>
 
 <script>
-    // System Config
     const CONFIG = {
         CLIENT_ID: "d39337b5d4a74e2aa7b06601320d4599",
         CLIENT_SECRET: "p4o2g1P0eZemvqJhQ4RWHLBEbJHPi2TlT13Q2-yaxDuzd5zoXCv0m_MOQiUmrnyNc3mcM6UfvuJUn_-pbYGmnQ",
         API_KEY: "6eT07O78GN7qxBvGaFE4P6VKDcesQZr51f8HuA6f",
-        
-        // Dynamically picks the URL where index.html is hosted (e.g. http://localhost:8000/index.html or https://dostified.github.io/mx-xerox-privacy)
-        REDIRECT_URI: window.location.origin + window.location.pathname,
-        
+        REDIRECT_URI: "https://dostified.github.io/mx-xerox-privacy/index.html",
         AUTH_URL: "https://auth.epsonconnect.com/auth/authorize",
         TOKEN_URL: "https://auth.epsonconnect.com/auth/token",
         API_BASE_URL: "https://api.epsonconnect.com/api/1/printing"
@@ -193,88 +176,82 @@
     let accessToken = null;
     let subjectId = null;
 
-    function log(message) {
+    function log(msg) {
         const box = document.getElementById('log-output');
-        box.innerText += `\n[${new Date().toLocaleTimeString()}] ${message}`;
+        box.innerText += `\n[${new Date().toLocaleTimeString()}] ${msg}`;
         box.scrollTop = box.scrollHeight;
     }
 
-    // Check environment
-    if (window.location.protocol === 'file:') {
-        document.getElementById('file-protocol-warning').style.display = 'block';
-        log("WARNING: File opened directly via file:// system protocol.");
-    }
-
-    // Step 1: Start OAuth Login Flow
     function startOAuthFlow() {
-        // Clean URL formatting
-        const cleanRedirectUri = CONFIG.REDIRECT_URI.replace(/\/$/, ""); 
-        const authUrl = `${CONFIG.AUTH_URL}?response_type=code&client_id=${CONFIG.CLIENT_ID}&redirect_uri=${encodeURIComponent(cleanRedirectUri)}&scope=device`;
-        
-        log("Redirecting to Epson Authentication Server...");
+        const cleanUri = encodeURIComponent(CONFIG.REDIRECT_URI.trim());
+        const authUrl = `${CONFIG.AUTH_URL}?response_type=code&client_id=${CONFIG.CLIENT_ID}&redirect_uri=${cleanUri}&scope=device`;
+        log("Redirecting to Epson Login...");
         window.location.href = authUrl;
     }
 
-    // Step 2: Handle OAuth Callback Code from Query Param
     async function handleAuthCallback() {
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
-        const error = params.get('error');
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const error = urlParams.get('error');
 
         if (error) {
-            log("Epson Auth Error Received: " + error);
+            log("Authentication Rejected: " + error);
             return;
         }
 
         if (code) {
-            log("Authorization Code obtained. Requesting Access Token...");
+            log("Authorization code detected. Exchanging for Access Token...");
             
-            // Clean Query Params from Address Bar
+            // Clear code parameter from URL bar without reloading
             window.history.replaceState({}, document.title, window.location.pathname);
-            
+
             try {
                 const credentials = `${CONFIG.CLIENT_ID}:${CONFIG.CLIENT_SECRET}`;
                 const authHeader = "Basic " + btoa(credentials);
-                const cleanRedirectUri = CONFIG.REDIRECT_URI.replace(/\/$/, "");
 
-                const postData = new URLSearchParams();
-                postData.append("grant_type", "authorization_code");
-                postData.append("code", code.trim());
-                postData.append("redirect_uri", cleanRedirectUri);
+                const bodyData = new URLSearchParams();
+                bodyData.append("grant_type", "authorization_code");
+                bodyData.append("code", code.trim());
+                bodyData.append("redirect_uri", CONFIG.REDIRECT_URI.trim());
 
                 const response = await fetch(CONFIG.TOKEN_URL, {
                     method: "POST",
                     headers: {
                         "Authorization": authHeader,
-                        "Content-Type": "application/x-www-form-urlencoded",
-                        "x-api-key": CONFIG.API_KEY
+                        "x-api-key": CONFIG.API_KEY,
+                        "Content-Type": "application/x-www-form-urlencoded"
                     },
-                    body: postData
+                    body: bodyData
                 });
 
                 const data = await response.json();
-                if (response.ok) {
+
+                if (response.ok && data.access_token) {
                     accessToken = data.access_token;
                     subjectId = data.subject_id;
-                    document.getElementById('auth-status').innerText = "Authenticated";
-                    document.getElementById('auth-status').className = "badge badge-success";
+
+                    // Update UI State
+                    const statusBadge = document.getElementById('auth-status');
+                    statusBadge.innerText = "Authenticated";
+                    statusBadge.className = "badge badge-success";
+
                     document.getElementById('btn-login').style.display = "none";
                     document.getElementById('btn-print').disabled = false;
-                    log("Authentication Successful! Access Token Acquired.");
+
+                    log("AUTH SUCCESS! Printer Device Linked Successfully.");
                 } else {
-                    log("Token Error (" + response.status + "): " + JSON.stringify(data));
+                    log("Token Exchange Failed (" + response.status + "): " + JSON.stringify(data));
                 }
             } catch (err) {
-                log("Token Fetch Exception: " + err.message);
+                log("Network / CORS Error during Token Exchange: " + err.message);
             }
         }
     }
 
-    // Step 3: Complete Print Execution Sequence
     async function executeFullPrintFlow() {
         const fileInput = document.getElementById('file-input');
         if (!fileInput.files.length) {
-            alert("Kripya print karne ke liye file select karein!");
+            alert("Kripya ek file select karein!");
             return;
         }
 
@@ -282,7 +259,6 @@
         document.getElementById('btn-print').disabled = true;
 
         try {
-            // 1. Create Job
             log("1/3 Creating Print Job...");
             const jobRes = await fetch(`${CONFIG.API_BASE_URL}/jobs`, {
                 method: "POST",
@@ -305,26 +281,22 @@
 
             const jobData = await jobRes.json();
             if (!jobRes.ok) throw new Error("Job Creation Failed: " + JSON.stringify(jobData));
-            
+
             const jobId = jobData.id;
             const uploadUri = jobData.upload_uri;
-            log(`Job Created Successfully! Job ID: ${jobId}`);
+            log(`Job Created! ID: ${jobId}`);
 
-            // 2. Upload File Payload
-            log("2/3 Uploading File Data to Epson Server...");
+            log("2/3 Uploading File Data...");
             const uploadRes = await fetch(`${uploadUri}&File=1.${file.name.split('.').pop()}`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/octet-stream"
-                },
+                headers: { "Content-Type": "application/octet-stream" },
                 body: file
             });
 
-            if (!uploadRes.ok) throw new Error("File Payload Upload Failed");
-            log("File Data Uploaded Successfully!");
+            if (!uploadRes.ok) throw new Error("Upload Failed");
+            log("File Data Uploaded!");
 
-            // 3. Trigger Print Execution
-            log("3/3 Sending Execution Command to Printer...");
+            log("3/3 Triggering Print Execution...");
             const execRes = await fetch(`${CONFIG.API_BASE_URL}/jobs/${jobId}/print`, {
                 method: "POST",
                 headers: {
@@ -336,13 +308,12 @@
             });
 
             if (execRes.ok) {
-                log("SUCCESS: Command Delivered to Printer!");
-                alert("Print Command Sent Successfully!");
+                log("SUCCESS: Document Sent to Printer Output Tray!");
+                alert("Print Command Successfully Delivered!");
             } else {
                 const execData = await execRes.json();
-                throw new Error("Execution Command Failed: " + JSON.stringify(execData));
+                throw new Error("Execution Failed: " + JSON.stringify(execData));
             }
-
         } catch (err) {
             log("ERROR: " + err.message);
         } finally {
@@ -350,7 +321,6 @@
         }
     }
 
-    // Auto-run on page load
     window.onload = handleAuthCallback;
 </script>
 
