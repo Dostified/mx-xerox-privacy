@@ -170,8 +170,8 @@
         REDIRECT_URI: "https://dostified.github.io/mx-xerox-privacy/index.html",
         AUTH_URL: "https://auth.epsonconnect.com/auth/authorize",
         
-        // CORS Proxy wrapper added to route token request safely
-        TOKEN_URL: "https://corsproxy.io/?" + encodeURIComponent("https://auth.epsonconnect.com/auth/token"),
+        // Updated to ThingProxy (Working Free CORS Proxy)
+        TOKEN_URL: "https://thingproxy.freeboard.io/fetch/https://auth.epsonconnect.com/auth/token",
         API_BASE_URL: "https://api.epsonconnect.com/api/1/printing"
     };
 
@@ -204,7 +204,7 @@
         if (code) {
             log("Authorization code detected. Requesting Token via Proxy...");
             
-            // Clear code from browser URL
+            // Clear code from address bar
             window.history.replaceState({}, document.title, window.location.pathname);
 
             try {
