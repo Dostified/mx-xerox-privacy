@@ -169,7 +169,9 @@
         API_KEY: "6eT07O78GN7qxBvGaFE4P6VKDcesQZr51f8HuA6f",
         REDIRECT_URI: "https://dostified.github.io/mx-xerox-privacy/index.html",
         AUTH_URL: "https://auth.epsonconnect.com/auth/authorize",
-        TOKEN_URL: "https://auth.epsonconnect.com/auth/token",
+        
+        // CORS Proxy wrapper added to route token request safely
+        TOKEN_URL: "https://corsproxy.io/?" + encodeURIComponent("https://auth.epsonconnect.com/auth/token"),
         API_BASE_URL: "https://api.epsonconnect.com/api/1/printing"
     };
 
@@ -200,9 +202,9 @@
         }
 
         if (code) {
-            log("Authorization code detected. Exchanging for Access Token...");
+            log("Authorization code detected. Requesting Token via Proxy...");
             
-            // Clear code parameter from URL bar without reloading
+            // Clear code from browser URL
             window.history.replaceState({}, document.title, window.location.pathname);
 
             try {
@@ -230,7 +232,6 @@
                     accessToken = data.access_token;
                     subjectId = data.subject_id;
 
-                    // Update UI State
                     const statusBadge = document.getElementById('auth-status');
                     statusBadge.innerText = "Authenticated";
                     statusBadge.className = "badge badge-success";
@@ -238,12 +239,12 @@
                     document.getElementById('btn-login').style.display = "none";
                     document.getElementById('btn-print').disabled = false;
 
-                    log("AUTH SUCCESS! Printer Device Linked Successfully.");
+                    log("AUTH SUCCESS! Access Token Acquired.");
                 } else {
                     log("Token Exchange Failed (" + response.status + "): " + JSON.stringify(data));
                 }
             } catch (err) {
-                log("Network / CORS Error during Token Exchange: " + err.message);
+                log("Fetch Exception: " + err.message);
             }
         }
     }
@@ -251,7 +252,7 @@
     async function executeFullPrintFlow() {
         const fileInput = document.getElementById('file-input');
         if (!fileInput.files.length) {
-            alert("Kripya ek file select karein!");
+            alert("File select karein!");
             return;
         }
 
